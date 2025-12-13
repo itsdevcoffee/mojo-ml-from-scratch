@@ -1,0 +1,23 @@
+[workspace]
+authors = ["itsdevcoffee <itstexmex@gmail.com>"]
+channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
+name = "visage-ml"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+# Development tasks
+hello = "mojo src/hello.mojo"
+test = "mojo tests/test_vector_ops.mojo"
+test-all = "bash scripts/run_tests.sh"
+repl = "mojo"
+
+# Block-specific tasks
+block0 = "mojo src/block0/vector_ops.mojo"
+block1 = "mojo src/block1/"
+
+[dependencies]
+max = ">=26.1.0.dev2025121105,<27"
+mojo = ">=0.26.1.0.dev2025121105,<0.27"
+matplotlib = ">=3.10.8,<4"
+scipy = ">=1.16.3,<2"
