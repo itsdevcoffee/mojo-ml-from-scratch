@@ -24,6 +24,16 @@ train-xor = "mojo -I src examples/train_xor.mojo"
 repl = "mojo"
 
 # =============================================================================
+# Audio Processing (mojo-audio package)
+# =============================================================================
+
+# Testing
+audio-test = "mojo -I packages/mojo-audio/src packages/mojo-audio/tests/test_window.mojo"
+
+# Examples
+audio-demo = "mojo -I packages/mojo-audio/src packages/mojo-audio/examples/window_demo.mojo"
+
+# =============================================================================
 # Learning Tasks (Educational Content in learn/ directory)
 # =============================================================================
 
@@ -41,7 +51,7 @@ learn-test-dot-product = "mojo learn/tests/block0/01_vector_matrix_ops/test_02_d
 learn-viz-dot-product = "python learn/scripts/block0/01_vector_matrix_ops/visualize_dot_product.py"
 
 [dependencies]
-max = ">=26.1.0.dev2025121105,<27"
-mojo = ">=0.26.1.0.dev2025121105,<0.27"
+max = ">=26.1.0.dev2025123105,<27"
+mojo = ">=0.26.1.0.dev2025123105,<0.27"
 matplotlib = ">=3.10.8,<4"
 scipy = ">=1.16.3,<2"
