@@ -5,8 +5,13 @@ SIMD-optimized DSP operations for machine learning audio preprocessing.
 Designed for Whisper and other speech recognition models.
 """
 
-from math import cos, sqrt, log, sin, atan2
+from math import cos, sqrt, log, sin, atan2, exp
 from math.constants import pi
+
+
+fn pow(base: Float64, exponent: Float64) -> Float64:
+    """Power function: base^exponent."""
+    return exp(exponent * log(base))
 
 
 # ==============================================================================
@@ -265,6 +270,265 @@ fn stft(
         spectrogram.append(frame_power^)
 
     return spectrogram^
+
+
+# ==============================================================================
+# Mel Scale Operations
+# ==============================================================================
+
+fn hz_to_mel(freq_hz: Float64) -> Float64:
+    """
+    Convert frequency from Hz to Mel scale.
+
+    Mel scale formula: mel = 2595 * log10(1 + hz/700)
+
+    The mel scale approximates human perception of pitch.
+    Equal distances on the mel scale sound equally different to humans.
+
+    Args:
+        freq_hz: Frequency in Hertz
+
+    Returns:
+        Frequency in Mels
+
+    Example:
+        ```mojo
+        var mel = hz_to_mel(1000.0)  # ~1000 Hz ≈ 1000 mels
+        ```
+    """
+    return 2595.0 * log(1.0 + freq_hz / 700.0) / log(10.0)
+
+
+fn mel_to_hz(freq_mel: Float64) -> Float64:
+    """
+    Convert frequency from Mel scale to Hz.
+
+    Inverse of hz_to_mel: hz = 700 * (10^(mel/2595) - 1)
+
+    Args:
+        freq_mel: Frequency in Mels
+
+    Returns:
+        Frequency in Hertz
+
+    Example:
+        ```mojo
+        var hz = mel_to_hz(1000.0)
+        ```
+    """
+    return 700.0 * (pow(10.0, freq_mel / 2595.0) - 1.0)
+
+
+fn create_mel_filterbank(
+    n_mels: Int,
+    n_fft: Int,
+    sample_rate: Int
+) -> List[List[Float64]]:
+    """
+    Create mel filterbank matrix for spectrogram → mel spectrogram conversion.
+
+    Creates triangular filters spaced evenly on the mel scale.
+
+    Args:
+        n_mels: Number of mel bands (Whisper: 80)
+        n_fft: FFT size (Whisper: 400)
+        sample_rate: Audio sample rate (Whisper: 16000)
+
+    Returns:
+        Filterbank matrix (n_mels × (n_fft/2 + 1))
+        For Whisper: (80 × 201)
+
+    Example:
+        ```mojo
+        var filterbank = create_mel_filterbank(80, 400, 16000)
+        # Shape: (80, 201) - ready to multiply with STFT output
+        ```
+
+    How it works:
+        - Converts Hz frequency bins to Mel scale
+        - Creates triangular filters on Mel scale
+        - Each filter has peak at one mel frequency
+        - Filters overlap to smooth the spectrum
+    """
+    var n_freq_bins = n_fft // 2 + 1  # Number of positive frequencies
+
+    # Frequency range: 0 Hz to Nyquist (sample_rate/2)
+    var nyquist = Float64(sample_rate) / 2.0
+
+    # Convert to mel scale
+    var mel_min = hz_to_mel(0.0)
+    var mel_max = hz_to_mel(nyquist)
+
+    # Create evenly spaced mel frequencies
+    var mel_points = List[Float64]()
+    var mel_step = (mel_max - mel_min) / Float64(n_mels + 1)
+
+    for i in range(n_mels + 2):
+        mel_points.append(mel_min + Float64(i) * mel_step)
+
+    # Convert mel points back to Hz
+    var hz_points = List[Float64]()
+    for i in range(len(mel_points)):
+        hz_points.append(mel_to_hz(mel_points[i]))
+
+    # Convert Hz to FFT bin numbers
+    var bin_points = List[Int]()
+    for i in range(len(hz_points)):
+        var bin = Int((Float64(n_fft + 1) * hz_points[i]) / Float64(sample_rate))
+        bin_points.append(bin)
+
+    # Create filterbank (n_mels × n_freq_bins)
+    var filterbank = List[List[Float64]]()
+
+    for mel_idx in range(n_mels):
+        var filter_band = List[Float64]()
+
+        # Initialize all bins to 0
+        for _ in range(n_freq_bins):
+            filter_band.append(0.0)
+
+        # Create triangular filter
+        var left = bin_points[mel_idx]
+        var center = bin_points[mel_idx + 1]
+        var right = bin_points[mel_idx + 2]
+
+        # Create triangular filter only if valid range
+        if center > left and right > center:
+            # Rising slope (left to center)
+            for bin_idx in range(left, center):
+                if bin_idx < n_freq_bins and bin_idx >= 0:
+                    var weight = Float64(bin_idx - left) / Float64(center - left)
+                    filter_band[bin_idx] = weight
+
+            # Falling slope (center to right)
+            for bin_idx in range(center, right):
+                if bin_idx < n_freq_bins and bin_idx >= 0:
+                    var weight = Float64(right - bin_idx) / Float64(right - center)
+                    filter_band[bin_idx] = weight
+
+        filterbank.append(filter_band^)
+
+    return filterbank^
+
+
+fn apply_mel_filterbank(
+    spectrogram: List[List[Float64]],
+    filterbank: List[List[Float64]]
+) raises -> List[List[Float64]]:
+    """
+    Apply mel filterbank to power spectrogram.
+
+    Converts linear frequency bins to mel-spaced bins.
+
+    Args:
+        spectrogram: Power spectrogram (n_freq_bins, n_frames)
+        filterbank: Mel filterbank (n_mels, n_freq_bins)
+
+    Returns:
+        Mel spectrogram (n_mels, n_frames)
+
+    Example:
+        ```mojo
+        var spec = stft(audio)  # (201, 3000)
+        var filterbank = create_mel_filterbank(80, 400, 16000)  # (80, 201)
+        var mel_spec = apply_mel_filterbank(spec, filterbank)  # (80, 3000)
+        ```
+    """
+    var n_frames = len(spectrogram)
+    if n_frames == 0:
+        raise Error("Empty spectrogram")
+
+    var n_freq_bins = len(spectrogram[0])
+    var n_mels = len(filterbank)
+
+    # Validate dimensions
+    if len(filterbank[0]) != n_freq_bins:
+        raise Error("Filterbank size mismatch with spectrogram")
+
+    var mel_spec = List[List[Float64]]()
+
+    # For each mel band
+    for mel_idx in range(n_mels):
+        var mel_band = List[Float64]()
+
+        # For each time frame
+        for frame_idx in range(n_frames):
+            var mel_energy: Float64 = 0.0
+
+            # Sum weighted frequency bins
+            for freq_idx in range(n_freq_bins):
+                mel_energy += filterbank[mel_idx][freq_idx] * spectrogram[frame_idx][freq_idx]
+
+            mel_band.append(mel_energy)
+
+        mel_spec.append(mel_band^)
+
+    return mel_spec^
+
+
+fn mel_spectrogram(
+    audio: List[Float64],
+    sample_rate: Int = 16000,
+    n_fft: Int = 400,
+    hop_length: Int = 160,
+    n_mels: Int = 80
+) raises -> List[List[Float64]]:
+    """
+    Compute mel spectrogram - the full Whisper preprocessing pipeline!
+
+    This is the complete transformation: audio → mel spectrogram
+
+    Args:
+        audio: Input audio samples
+        sample_rate: Sample rate in Hz (Whisper: 16000)
+        n_fft: FFT size (Whisper: 400)
+        hop_length: Frame hop size (Whisper: 160)
+        n_mels: Number of mel bands (Whisper: 80)
+
+    Returns:
+        Mel spectrogram (n_mels, n_frames)
+        For 30s Whisper audio: (80, ~3000) ✓
+
+    Example:
+        ```mojo
+        # Load 30s audio @ 16kHz
+        var audio: List[Float64] = [...]  # 480,000 samples
+
+        # Get Whisper-compatible mel spectrogram
+        var mel_spec = mel_spectrogram(audio)
+        # Output: (80, ~3000) - ready for Whisper!
+        ```
+
+    Pipeline:
+        1. STFT with Hann window → (201, ~3000)
+        2. Mel filterbank application → (80, ~3000)
+        3. Log scaling → final mel spectrogram
+
+    This is exactly what Whisper expects as input!
+    """
+    # Step 1: Compute STFT (power spectrogram)
+    var power_spec = stft(audio, n_fft, hop_length, "hann")
+
+    # Step 2: Create mel filterbank
+    var filterbank = create_mel_filterbank(n_mels, n_fft, sample_rate)
+
+    # Step 3: Apply filterbank
+    var mel_spec = apply_mel_filterbank(power_spec, filterbank)
+
+    # Step 4: Log scaling (with small epsilon to avoid log(0))
+    var epsilon: Float64 = 1e-10
+
+    for i in range(len(mel_spec)):
+        for j in range(len(mel_spec[i])):
+            # Clamp to epsilon minimum
+            var value = mel_spec[i][j]
+            if value < epsilon:
+                value = epsilon
+
+            # Apply log10 scaling
+            mel_spec[i][j] = log(value) / log(10.0)
+
+    return mel_spec^
 
 
 # ==============================================================================
