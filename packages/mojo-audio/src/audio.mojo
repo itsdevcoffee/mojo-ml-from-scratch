@@ -109,24 +109,29 @@ struct Complex(Copyable, Movable):
         self.real = existing.real
         self.imag = existing.imag
 
+    @always_inline
     fn __add__(self, other: Complex) -> Complex:
         """Complex addition."""
         return Complex(self.real + other.real, self.imag + other.imag)
 
+    @always_inline
     fn __sub__(self, other: Complex) -> Complex:
         """Complex subtraction."""
         return Complex(self.real - other.real, self.imag - other.imag)
 
+    @always_inline
     fn __mul__(self, other: Complex) -> Complex:
         """Complex multiplication."""
         var r = self.real * other.real - self.imag * other.imag
         var i = self.real * other.imag + self.imag * other.real
         return Complex(r, i)
 
+    @always_inline
     fn magnitude(self) -> Float64:
         """Compute magnitude: sqrt(real² + imag²)."""
         return sqrt(self.real * self.real + self.imag * self.imag)
 
+    @always_inline
     fn power(self) -> Float64:
         """Compute power: real² + imag²."""
         return self.real * self.real + self.imag * self.imag
@@ -144,6 +149,7 @@ fn next_power_of_2(n: Int) -> Int:
     return power
 
 
+@always_inline
 fn bit_reverse(n: Int, bits: Int) -> Int:
     """
     Reverse bits of integer n using 'bits' number of bits.
