@@ -7,7 +7,7 @@ Designed for Whisper and other speech recognition models.
 
 from math import cos, sqrt, log, sin, atan2, exp
 from math.constants import pi
-from sys import simd_width
+from memory import UnsafePointer
 
 
 fn pow(base: Float64, exponent: Float64) -> Float64:
@@ -23,107 +23,52 @@ fn apply_window_simd(signal: List[Float64], window: List[Float64]) raises -> Lis
     """
     SIMD-optimized window application.
 
-    Process multiple samples simultaneously using SIMD vectorization.
-    Significantly faster than scalar version for large signals.
+    Uses pointer-based SIMD for fast element-wise multiplication.
 
     Args:
         signal: Input signal
-        window: Window coefficients (must match signal length)
+        window: Window coefficients
 
     Returns:
         Windowed signal
-
-    Raises:
-        Error if lengths don't match
     """
     if len(signal) != len(window):
-        raise Error(
-            "Signal and window must have same length. Got signal="
-            + String(len(signal)) + ", window=" + String(len(window))
-        )
+        raise Error("Signal and window length mismatch")
 
     var N = len(signal)
-    var result = List[Float64]()
-
-    # Reserve capacity
-    for _ in range(N):
-        result.append(0.0)
-
-    # SIMD width for Float64 (typically 4 or 8 depending on hardware)
-    alias simd_w = 4
-
-    # Process in SIMD chunks
-    var i = 0
-    while i + simd_w <= N:
-        # Load SIMD vectors
-        var sig_simd = SIMD[DType.float64, simd_w]()
-        var win_simd = SIMD[DType.float64, simd_w]()
-
-        for j in range(simd_w):
-            sig_simd[j] = signal[i + j]
-            win_simd[j] = window[i + j]
-
-        # SIMD multiplication (process 4 at once!)
-        var res_simd = sig_simd * win_simd
-
-        # Store results
-        for j in range(simd_w):
-            result[i + j] = res_simd[j]
-
-        i += simd_w
-
-    # Handle remainder (scalar)
-    while i < N:
-        result[i] = signal[i] * window[i]
-        i += 1
-
-    return result^
-
-
-fn power_spectrum_simd(fft_output: List[Complex]) -> List[Float64]:
-    """
-    SIMD-optimized power spectrum computation.
-
-    Computes real² + imag² for each complex number using SIMD.
-
-    Args:
-        fft_output: Complex FFT coefficients
-
-    Returns:
-        Power values (real-valued)
-    """
-    var N = len(fft_output)
     var result = List[Float64]()
 
     # Pre-allocate
     for _ in range(N):
         result.append(0.0)
 
-    alias simd_w = 4
+    # Use SIMD for element-wise multiply
+    comptime simd_width = 8
 
-    # Process in SIMD chunks
     var i = 0
-    while i + simd_w <= N:
-        # Load real and imaginary parts into SIMD vectors
-        var real_simd = SIMD[DType.float64, simd_w]()
-        var imag_simd = SIMD[DType.float64, simd_w]()
+    while i + simd_width <= N:
+        # Create SIMD vectors by loading from lists
+        var sig_vec = SIMD[DType.float64, simd_width]()
+        var win_vec = SIMD[DType.float64, simd_width]()
 
-        for j in range(simd_w):
-            real_simd[j] = fft_output[i + j].real
-            imag_simd[j] = fft_output[i + j].imag
+        @parameter
+        for j in range(simd_width):
+            sig_vec[j] = signal[i + j]
+            win_vec[j] = window[i + j]
 
-        # SIMD power: real² + imag²
-        var power_simd = real_simd * real_simd + imag_simd * imag_simd
+        # SIMD multiply
+        var res_vec = sig_vec * win_vec
 
-        # Store results
-        for j in range(simd_w):
-            result[i + j] = power_simd[j]
+        # Store back
+        @parameter
+        for j in range(simd_width):
+            result[i + j] = res_vec[j]
 
-        i += simd_w
+        i += simd_width
 
-    # Handle remainder
+    # Remainder
     while i < N:
-        result[i] = fft_output[i].power()
+        result[i] = signal[i] * window[i]
         i += 1
 
     return result^
@@ -333,7 +278,7 @@ fn fft(signal: List[Float64]) raises -> List[Complex]:
 
 fn power_spectrum(fft_output: List[Complex]) -> List[Float64]:
     """
-    Compute power spectrum from FFT output.
+    Compute power spectrum from FFT output (SIMD-optimized).
 
     Power = real² + imag² for each frequency bin.
 
@@ -349,10 +294,41 @@ fn power_spectrum(fft_output: List[Complex]) -> List[Float64]:
         var power = power_spectrum(spectrum)
         ```
     """
+    var N = len(fft_output)
     var result = List[Float64]()
 
-    for i in range(len(fft_output)):
-        result.append(fft_output[i].power())
+    # Pre-allocate
+    for _ in range(N):
+        result.append(0.0)
+
+    # SIMD processing
+    comptime simd_width = 8
+
+    var i = 0
+    while i + simd_width <= N:
+        # Load real/imag into SIMD vectors
+        var real_vec = SIMD[DType.float64, simd_width]()
+        var imag_vec = SIMD[DType.float64, simd_width]()
+
+        @parameter
+        for j in range(simd_width):
+            real_vec[j] = fft_output[i + j].real
+            imag_vec[j] = fft_output[i + j].imag
+
+        # SIMD: real² + imag²
+        var power_vec = real_vec * real_vec + imag_vec * imag_vec
+
+        # Store
+        @parameter
+        for j in range(simd_width):
+            result[i + j] = power_vec[j]
+
+        i += simd_width
+
+    # Remainder
+    while i < N:
+        result[i] = fft_output[i].power()
+        i += 1
 
     return result^
 
@@ -413,8 +389,8 @@ fn stft(
             else:
                 frame.append(0.0)  # Pad if needed
 
-        # Apply window
-        var windowed = apply_window(frame, window)
+        # Apply window (SIMD-optimized)
+        var windowed = apply_window_simd(frame, window)
 
         # Compute FFT
         var fft_result = fft(windowed)
