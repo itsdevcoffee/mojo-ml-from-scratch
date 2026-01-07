@@ -29,11 +29,11 @@ fn pow(base: Float64, exponent: Float64) -> Float64:
 # SIMD-Optimized Operations
 # ==============================================================================
 
-fn apply_window_simd(signal: List[Float64], window: List[Float64]) raises -> List[Float64]:
+fn apply_window_simd(signal: List[Float32], window: List[Float32]) raises -> List[Float32]:
     """
-    SIMD-optimized window application.
+    SIMD-optimized window application (Float32 for 2x SIMD width!).
 
-    Uses pointer-based SIMD for fast element-wise multiplication.
+    Process 16 Float32 at once (vs 8 Float64).
 
     Args:
         signal: Input signal
@@ -46,27 +46,27 @@ fn apply_window_simd(signal: List[Float64], window: List[Float64]) raises -> Lis
         raise Error("Signal and window length mismatch")
 
     var N = len(signal)
-    var result = List[Float64]()
+    var result = List[Float32]()
 
     # Pre-allocate
     for _ in range(N):
         result.append(0.0)
 
-    # Use SIMD for element-wise multiply
-    comptime simd_width = 8
+    # SIMD with Float32 - 16 elements at once (2x vs Float64!)
+    comptime simd_width = 16
 
     var i = 0
     while i + simd_width <= N:
         # Create SIMD vectors by loading from lists
-        var sig_vec = SIMD[DType.float64, simd_width]()
-        var win_vec = SIMD[DType.float64, simd_width]()
+        var sig_vec = SIMD[DType.float32, simd_width]()
+        var win_vec = SIMD[DType.float32, simd_width]()
 
         @parameter
         for j in range(simd_width):
             sig_vec[j] = signal[i + j]
             win_vec[j] = window[i + j]
 
-        # SIMD multiply
+        # SIMD multiply (16 at once!)
         var res_vec = sig_vec * win_vec
 
         # Store back
@@ -100,11 +100,11 @@ comptime WHISPER_FRAMES_30S = 3000
 # ==============================================================================
 
 struct Complex(Copyable, Movable):
-    """Complex number for FFT operations (Float64 precision)."""
-    var real: Float64
-    var imag: Float64
+    """Complex number for FFT operations (Float32 for 2x SIMD throughput!)."""
+    var real: Float32
+    var imag: Float32
 
-    fn __init__(out self, real: Float64, imag: Float64 = 0.0):
+    fn __init__(out self, real: Float32, imag: Float32 = 0.0):
         """Initialize complex number."""
         self.real = real
         self.imag = imag
@@ -137,12 +137,12 @@ struct Complex(Copyable, Movable):
         return Complex(r, i)
 
     @always_inline
-    fn magnitude(self) -> Float64:
+    fn magnitude(self) -> Float32:
         """Compute magnitude: sqrt(real² + imag²)."""
         return sqrt(self.real * self.real + self.imag * self.imag)
 
     @always_inline
-    fn power(self) -> Float64:
+    fn power(self) -> Float32:
         """Compute power: real² + imag²."""
         return self.real * self.real + self.imag * self.imag
 
@@ -186,7 +186,7 @@ fn log2_int(n: Int) -> Int:
 
 fn precompute_twiddle_factors(N: Int) -> List[Complex]:
     """
-    Pre-compute all twiddle factors for FFT of size N.
+    Pre-compute all twiddle factors for FFT of size N (Float32).
 
     Twiddle factor: W_N^k = e^(-2πik/N) = cos(-2πk/N) + i*sin(-2πk/N)
 
@@ -197,20 +197,20 @@ fn precompute_twiddle_factors(N: Int) -> List[Complex]:
         N: FFT size (power of 2)
 
     Returns:
-        Twiddle factors for all stages
+        Twiddle factors for all stages (Float32 precision)
     """
     var twiddles = List[Complex]()
 
     # Pre-compute all twiddles we'll need for all stages
     for i in range(N):
-        var angle = -2.0 * pi * Float64(i) / Float64(N)
-        twiddles.append(Complex(cos(angle), sin(angle)))
+        var angle = -2.0 * pi * Float32(i) / Float32(N)
+        twiddles.append(Complex(Float32(cos(angle)), Float32(sin(angle))))
 
     return twiddles^
 
 
 fn fft_iterative_with_twiddles(
-    signal: List[Float64],
+    signal: List[Float32],
     twiddles: List[Complex]
 ) raises -> List[Complex]:
     """
