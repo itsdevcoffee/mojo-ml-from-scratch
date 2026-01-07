@@ -9,6 +9,16 @@ from math import cos, sqrt, log, sin, atan2, exp
 from math.constants import pi
 from memory import UnsafePointer
 
+# ==============================================================================
+# Type Configuration (Float32 for 2x SIMD throughput!)
+# ==============================================================================
+
+alias AudioFloat = DType.float32  # Audio processing uses Float32
+alias SIMD_WIDTH = 16  # Float32: 16 elements (vs Float64: 8 elements)
+
+fn pow_f32(base: Float32, exponent: Float32) -> Float32:
+    """Power function for Float32."""
+    return exp(exponent * log(base))
 
 fn pow(base: Float64, exponent: Float64) -> Float64:
     """Power function: base^exponent."""
@@ -90,7 +100,7 @@ comptime WHISPER_FRAMES_30S = 3000
 # ==============================================================================
 
 struct Complex(Copyable, Movable):
-    """Complex number for FFT operations."""
+    """Complex number for FFT operations (Float64 precision)."""
     var real: Float64
     var imag: Float64
 
