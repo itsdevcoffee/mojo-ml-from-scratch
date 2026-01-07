@@ -269,9 +269,9 @@ fn fft_iterative_with_twiddles(
     return result^
 
 
-fn fft_iterative(signal: List[Float32]) raises -> List[Complex]:
+fn fft_iterative(signal: List[Float64]) raises -> List[Complex]:
     """
-    Iterative FFT using Cooley-Tukey algorithm (Float32).
+    Iterative FFT using Cooley-Tukey algorithm.
 
     Computes twiddles on-the-fly. For repeated FFTs, use fft_iterative_with_twiddles!
 
@@ -294,7 +294,7 @@ fn fft_iterative(signal: List[Float32]) raises -> List[Complex]:
     return fft_iterative_with_twiddles(signal, twiddles)
 
 
-fn fft_internal(signal: List[Float32]) raises -> List[Complex]:
+fn fft_internal(signal: List[Float64]) raises -> List[Complex]:
     """
     Internal FFT - uses iterative algorithm for better performance.
 
@@ -303,7 +303,7 @@ fn fft_internal(signal: List[Float32]) raises -> List[Complex]:
     return fft_iterative(signal)
 
 
-fn rfft(signal: List[Float32]) raises -> List[Complex]:
+fn rfft(signal: List[Float64]) raises -> List[Complex]:
     """
     Real FFT - optimized for real-valued input (like audio!).
 
@@ -329,7 +329,7 @@ fn rfft(signal: List[Float32]) raises -> List[Complex]:
     var fft_size = next_power_of_2(N)
 
     # Pad to power of 2
-    var padded = List[Float32]()
+    var padded = List[Float64]()
     for i in range(N):
         padded.append(signal[i])
     for _ in range(N, fft_size):
@@ -348,7 +348,7 @@ fn rfft(signal: List[Float32]) raises -> List[Complex]:
     return positive_freqs^
 
 
-fn fft(signal: List[Float32]) raises -> List[Complex]:
+fn fft(signal: List[Float64]) raises -> List[Complex]:
     """
     Fast Fourier Transform using Cooley-Tukey algorithm.
 
@@ -375,7 +375,7 @@ fn fft(signal: List[Float32]) raises -> List[Complex]:
     # Pad to next power of 2 if needed
     var fft_size = next_power_of_2(N)
 
-    var padded = List[Float32]()
+    var padded = List[Float64]()
     for i in range(N):
         padded.append(signal[i])
     for _ in range(N, fft_size):
@@ -385,7 +385,7 @@ fn fft(signal: List[Float32]) raises -> List[Complex]:
     return fft_internal(padded)
 
 
-fn power_spectrum(fft_output: List[Complex]) -> List[Float32]:
+fn power_spectrum(fft_output: List[Complex]) -> List[Float64]:
     """
     Compute power spectrum from FFT output (SIMD-optimized).
 
@@ -404,27 +404,27 @@ fn power_spectrum(fft_output: List[Complex]) -> List[Float32]:
         ```
     """
     var N = len(fft_output)
-    var result = List[Float32]()
+    var result = List[Float64]()
 
     # Pre-allocate
     for _ in range(N):
         result.append(0.0)
 
-    # SIMD processing with Float32 (16 elements!)
-    comptime simd_width = 16
+    # SIMD processing
+    comptime simd_width = 8
 
     var i = 0
     while i + simd_width <= N:
         # Load real/imag into SIMD vectors
-        var real_vec = SIMD[DType.float32, simd_width]()
-        var imag_vec = SIMD[DType.float32, simd_width]()
+        var real_vec = SIMD[DType.float64, simd_width]()
+        var imag_vec = SIMD[DType.float64, simd_width]()
 
         @parameter
         for j in range(simd_width):
             real_vec[j] = fft_output[i + j].real
             imag_vec[j] = fft_output[i + j].imag
 
-        # SIMD: real² + imag² (16 at once!)
+        # SIMD: real² + imag²
         var power_vec = real_vec * real_vec + imag_vec * imag_vec
 
         # Store
@@ -443,7 +443,7 @@ fn power_spectrum(fft_output: List[Complex]) -> List[Float32]:
 
 
 fn rfft_with_twiddles(
-    signal: List[Float32],
+    signal: List[Float64],
     twiddles: List[Complex]
 ) raises -> List[Complex]:
     """
@@ -462,7 +462,7 @@ fn rfft_with_twiddles(
     var fft_size = next_power_of_2(N)
 
     # Pad
-    var padded = List[Float32]()
+    var padded = List[Float64]()
     for i in range(N):
         padded.append(signal[i])
     for _ in range(N, fft_size):
@@ -482,30 +482,29 @@ fn rfft_with_twiddles(
 
 
 fn stft(
-    signal: List[Float32],
+    signal: List[Float64],
     n_fft: Int = 400,
     hop_length: Int = 160,
     window_fn: String = "hann"
-) raises -> List[List[Float32]]:
+) raises -> List[List[Float64]]:
     """
-    Short-Time Fourier Transform - Apply FFT to windowed frames (Float32).
+    Short-Time Fourier Transform - Apply FFT to windowed frames.
 
     Optimized: Caches twiddle factors across all frames!
-    Float32 for 2x SIMD throughput!
 
     Args:
-        signal: Input audio signal (Float32)
+        signal: Input audio signal
         n_fft: FFT size (window size)
         hop_length: Step size between frames
         window_fn: "hann" or "hamming"
 
     Returns:
-        Spectrogram (n_fft/2+1, n_frames) in Float32
+        Spectrogram (n_fft/2+1, n_frames)
 
     For 30s audio @ 16kHz: 3000 frames
     """
     # Create window once
-    var window: List[Float32]
+    var window: List[Float64]
     if window_fn == "hann":
         window = hann_window(n_fft)
     elif window_fn == "hamming":
@@ -521,14 +520,14 @@ fn stft(
     var num_frames = (len(signal) - n_fft) // hop_length + 1
 
     # Initialize result
-    var spectrogram = List[List[Float32]]()
+    var spectrogram = List[List[Float64]]()
 
     # Process each frame (reusing cached twiddles!)
     for frame_idx in range(num_frames):
         var start = frame_idx * hop_length
 
         # Extract frame
-        var frame = List[Float32]()
+        var frame = List[Float64]()
         for i in range(n_fft):
             if start + i < len(signal):
                 frame.append(signal[start + i])
@@ -545,7 +544,7 @@ fn stft(
         var full_power = power_spectrum(fft_result)
 
         # Take needed bins
-        var frame_power = List[Float32]()
+        var frame_power = List[Float64]()
         var needed_bins = n_fft // 2 + 1
         for i in range(needed_bins):
             if i < len(full_power):
@@ -560,25 +559,32 @@ fn stft(
 # Mel Scale Operations
 # ==============================================================================
 
-fn hz_to_mel(freq_hz: Float32) -> Float32:
+fn hz_to_mel(freq_hz: Float64) -> Float64:
     """
-    Convert frequency from Hz to Mel scale (Float32).
+    Convert frequency from Hz to Mel scale.
 
     Mel scale formula: mel = 2595 * log10(1 + hz/700)
+
+    The mel scale approximates human perception of pitch.
+    Equal distances on the mel scale sound equally different to humans.
 
     Args:
         freq_hz: Frequency in Hertz
 
     Returns:
         Frequency in Mels
+
+    Example:
+        ```mojo
+        var mel = hz_to_mel(1000.0)  # ~1000 Hz ≈ 1000 mels
+        ```
     """
-    var log_val = log(Float64(1.0 + freq_hz / 700.0))
-    return Float32(2595.0 * log_val / log(10.0))
+    return 2595.0 * log(1.0 + freq_hz / 700.0) / log(10.0)
 
 
-fn mel_to_hz(freq_mel: Float32) -> Float32:
+fn mel_to_hz(freq_mel: Float64) -> Float64:
     """
-    Convert frequency from Mel scale to Hz (Float32).
+    Convert frequency from Mel scale to Hz.
 
     Inverse of hz_to_mel: hz = 700 * (10^(mel/2595) - 1)
 
@@ -587,16 +593,20 @@ fn mel_to_hz(freq_mel: Float32) -> Float32:
 
     Returns:
         Frequency in Hertz
+
+    Example:
+        ```mojo
+        var hz = mel_to_hz(1000.0)
+        ```
     """
-    var pow_val = pow(Float64(10.0), Float64(freq_mel / 2595.0))
-    return Float32(700.0 * (pow_val - 1.0))
+    return 700.0 * (pow(10.0, freq_mel / 2595.0) - 1.0)
 
 
 fn create_mel_filterbank(
     n_mels: Int,
     n_fft: Int,
     sample_rate: Int
-) -> List[List[Float32]]:
+) -> List[List[Float64]]:
     """
     Create mel filterbank matrix for spectrogram → mel spectrogram conversion.
 
@@ -626,35 +636,35 @@ fn create_mel_filterbank(
     var n_freq_bins = n_fft // 2 + 1  # Number of positive frequencies
 
     # Frequency range: 0 Hz to Nyquist (sample_rate/2)
-    var nyquist = Float32(sample_rate) / 2.0
+    var nyquist = Float64(sample_rate) / 2.0
 
     # Convert to mel scale
     var mel_min = hz_to_mel(0.0)
     var mel_max = hz_to_mel(nyquist)
 
     # Create evenly spaced mel frequencies
-    var mel_points = List[Float32]()
-    var mel_step = (mel_max - mel_min) / Float32(n_mels + 1)
+    var mel_points = List[Float64]()
+    var mel_step = (mel_max - mel_min) / Float64(n_mels + 1)
 
     for i in range(n_mels + 2):
-        mel_points.append(mel_min + Float32(i) * mel_step)
+        mel_points.append(mel_min + Float64(i) * mel_step)
 
     # Convert mel points back to Hz
-    var hz_points = List[Float32]()
+    var hz_points = List[Float64]()
     for i in range(len(mel_points)):
         hz_points.append(mel_to_hz(mel_points[i]))
 
     # Convert Hz to FFT bin numbers
     var bin_points = List[Int]()
     for i in range(len(hz_points)):
-        var bin = Int((Float32(n_fft + 1) * hz_points[i]) / Float32(sample_rate))
+        var bin = Int((Float64(n_fft + 1) * hz_points[i]) / Float64(sample_rate))
         bin_points.append(bin)
 
     # Create filterbank (n_mels × n_freq_bins)
-    var filterbank = List[List[Float32]]()
+    var filterbank = List[List[Float64]]()
 
     for mel_idx in range(n_mels):
-        var filter_band = List[Float32]()
+        var filter_band = List[Float64]()
 
         # Initialize all bins to 0
         for _ in range(n_freq_bins):
@@ -670,13 +680,13 @@ fn create_mel_filterbank(
             # Rising slope (left to center)
             for bin_idx in range(left, center):
                 if bin_idx < n_freq_bins and bin_idx >= 0:
-                    var weight = Float32(bin_idx - left) / Float32(center - left)
+                    var weight = Float64(bin_idx - left) / Float64(center - left)
                     filter_band[bin_idx] = weight
 
             # Falling slope (center to right)
             for bin_idx in range(center, right):
                 if bin_idx < n_freq_bins and bin_idx >= 0:
-                    var weight = Float32(right - bin_idx) / Float32(right - center)
+                    var weight = Float64(right - bin_idx) / Float64(right - center)
                     filter_band[bin_idx] = weight
 
         filterbank.append(filter_band^)
@@ -686,26 +696,26 @@ fn create_mel_filterbank(
 
 struct SparseFilter(Copyable, Movable):
     """
-    Sparse representation of mel filter band (Float32).
+    Sparse representation of mel filter band.
 
     Stores only non-zero weights and their indices.
     Dramatically reduces iterations in mel filterbank application.
     """
     var start_idx: Int      # First non-zero bin
     var end_idx: Int        # Last non-zero bin
-    var weights: List[Float32]  # Only non-zero weights (Float32)
+    var weights: List[Float64]  # Only non-zero weights
 
     fn __init__(out self, start: Int, end: Int):
         """Initialize sparse filter."""
         self.start_idx = start
         self.end_idx = end
-        self.weights = List[Float32]()
+        self.weights = List[Float64]()
 
     fn __copyinit__(out self, existing: Self):
         """Copy constructor."""
         self.start_idx = existing.start_idx
         self.end_idx = existing.end_idx
-        self.weights = List[Float32]()
+        self.weights = List[Float64]()
         for i in range(len(existing.weights)):
             self.weights.append(existing.weights[i])
 
@@ -717,7 +727,7 @@ struct SparseFilter(Copyable, Movable):
 
 
 fn create_sparse_mel_filterbank(
-    filterbank: List[List[Float32]]
+    filterbank: List[List[Float64]]
 ) -> List[SparseFilter]:
     """
     Convert dense filterbank to sparse representation.
@@ -758,9 +768,9 @@ fn create_sparse_mel_filterbank(
 
 
 fn apply_mel_filterbank(
-    spectrogram: List[List[Float32]],
-    filterbank: List[List[Float32]]
-) raises -> List[List[Float32]]:
+    spectrogram: List[List[Float64]],
+    filterbank: List[List[Float64]]
+) raises -> List[List[Float64]]:
     """
     Apply mel filterbank to power spectrogram (sparse optimized).
 
@@ -788,11 +798,11 @@ fn apply_mel_filterbank(
     # Create sparse representation (one-time cost)
     var sparse_filters = create_sparse_mel_filterbank(filterbank)
 
-    var mel_spec = List[List[Float32]]()
+    var mel_spec = List[List[Float64]]()
 
     # For each mel band (using sparse filters!)
     for mel_idx in range(n_mels):
-        var mel_band = List[Float32]()
+        var mel_band = List[Float64]()
 
         # Pre-allocate
         for _ in range(n_frames):
@@ -804,7 +814,7 @@ fn apply_mel_filterbank(
 
         # For each time frame
         for frame_idx in range(n_frames):
-            var mel_energy: Float32 = 0.0
+            var mel_energy: Float64 = 0.0
 
             # Only iterate over non-zero filter weights!
             var weight_idx = 0
@@ -821,33 +831,32 @@ fn apply_mel_filterbank(
 
 
 fn mel_spectrogram(
-    audio: List[Float32],
+    audio: List[Float64],
     sample_rate: Int = 16000,
     n_fft: Int = 400,
     hop_length: Int = 160,
     n_mels: Int = 80
-) raises -> List[List[Float32]]:
+) raises -> List[List[Float64]]:
     """
-    Compute mel spectrogram - the full Whisper preprocessing pipeline! (Float32)
+    Compute mel spectrogram - the full Whisper preprocessing pipeline!
 
     This is the complete transformation: audio → mel spectrogram
-    Float32 for 2x SIMD throughput and 2x less memory!
 
     Args:
-        audio: Input audio samples (Float32)
+        audio: Input audio samples
         sample_rate: Sample rate in Hz (Whisper: 16000)
         n_fft: FFT size (Whisper: 400)
         hop_length: Frame hop size (Whisper: 160)
         n_mels: Number of mel bands (Whisper: 80)
 
     Returns:
-        Mel spectrogram (n_mels, n_frames) in Float32
+        Mel spectrogram (n_mels, n_frames)
         For 30s Whisper audio: (80, ~3000) ✓
 
     Example:
         ```mojo
         # Load 30s audio @ 16kHz
-        var audio: List[Float32] = [...]  # 480,000 samples
+        var audio: List[Float64] = [...]  # 480,000 samples
 
         # Get Whisper-compatible mel spectrogram
         var mel_spec = mel_spectrogram(audio)
@@ -871,7 +880,7 @@ fn mel_spectrogram(
     var mel_spec = apply_mel_filterbank(power_spec, filterbank)
 
     # Step 4: Log scaling (with small epsilon to avoid log(0))
-    var epsilon: Float32 = 1e-10
+    var epsilon: Float64 = 1e-10
 
     for i in range(len(mel_spec)):
         for j in range(len(mel_spec[i])):
@@ -881,8 +890,7 @@ fn mel_spectrogram(
                 value = epsilon
 
             # Apply log10 scaling
-            var log_value = log(Float64(value)) / log(10.0)
-            mel_spec[i][j] = Float32(log_value)
+            mel_spec[i][j] = log(value) / log(10.0)
 
     return mel_spec^
 
@@ -891,7 +899,7 @@ fn mel_spectrogram(
 # Window Functions
 # ==============================================================================
 
-fn hann_window(size: Int) -> List[Float32]:
+fn hann_window(size: Int) -> List[Float64]:
     """
     Generate Hann window.
 
@@ -917,18 +925,18 @@ fn hann_window(size: Int) -> List[Float32]:
         - Maximum at center (1.0)
         - Smoother than Hamming
     """
-    var window = List[Float32]()
-    var N = Float32(size - 1)
+    var window = List[Float64]()
+    var N = Float64(size - 1)
 
     for n in range(size):
-        var n_float = Float32(n)
+        var n_float = Float64(n)
         var coefficient = 0.5 * (1.0 - cos(2.0 * pi * n_float / N))
         window.append(coefficient)
 
     return window^
 
 
-fn hamming_window(size: Int) -> List[Float32]:
+fn hamming_window(size: Int) -> List[Float64]:
     """
     Generate Hamming window.
 
@@ -954,18 +962,18 @@ fn hamming_window(size: Int) -> List[Float32]:
         - Maximum at center: ~1.0
         - Narrower main lobe than Hann
     """
-    var window = List[Float32]()
-    var N = Float32(size - 1)
+    var window = List[Float64]()
+    var N = Float64(size - 1)
 
     for n in range(size):
-        var n_float = Float32(n)
+        var n_float = Float64(n)
         var coefficient = 0.54 - 0.46 * cos(2.0 * pi * n_float / N)
         window.append(coefficient)
 
     return window^
 
 
-fn apply_window(signal: List[Float32], window: List[Float32]) raises -> List[Float32]:
+fn apply_window(signal: List[Float64], window: List[Float64]) raises -> List[Float64]:
     """
     Apply window function to signal (element-wise multiplication).
 
@@ -992,7 +1000,7 @@ fn apply_window(signal: List[Float32], window: List[Float32]) raises -> List[Flo
             + String(len(signal)) + ", window=" + String(len(window))
         )
 
-    var result = List[Float32]()
+    var result = List[Float64]()
     for i in range(len(signal)):
         result.append(signal[i] * window[i])
 
@@ -1003,7 +1011,7 @@ fn apply_window(signal: List[Float32], window: List[Float32]) raises -> List[Flo
 # Utility Functions
 # ==============================================================================
 
-fn pad_to_length(signal: List[Float32], target_length: Int) -> List[Float32]:
+fn pad_to_length(signal: List[Float64], target_length: Int) -> List[Float64]:
     """
     Pad signal with zeros to target length.
 
@@ -1020,20 +1028,20 @@ fn pad_to_length(signal: List[Float32], target_length: Int) -> List[Float32]:
         var padded = pad_to_length(signal, 400)  # Pads to n_fft
         ```
     """
-    var result = List[Float32]()
+    var result = List[Float64]()
 
     # Copy original signal
     for i in range(len(signal)):
         result.append(signal[i])
 
     # Add zeros if needed
-    for _ in range(len(signal), target_length):
+    for i in range(len(signal), target_length):
         result.append(0.0)
 
     return result^
 
 
-fn rms_energy(signal: List[Float32]) -> Float32:
+fn rms_energy(signal: List[Float64]) -> Float64:
     """
     Compute Root Mean Square energy of signal.
 
@@ -1057,16 +1065,16 @@ fn rms_energy(signal: List[Float32]) -> Float32:
             print("Speech detected!")
         ```
     """
-    var sum_squares: Float32 = 0.0
+    var sum_squares: Float64 = 0.0
 
     for i in range(len(signal)):
         sum_squares += signal[i] * signal[i]
 
-    var mean_square = sum_squares / Float32(len(signal))
+    var mean_square = sum_squares / len(signal)
     return sqrt(mean_square)
 
 
-fn normalize_audio(signal: List[Float32]) -> List[Float32]:
+fn normalize_audio(signal: List[Float64]) -> List[Float64]:
     """
     Normalize audio to [-1.0, 1.0] range.
 
@@ -1082,7 +1090,7 @@ fn normalize_audio(signal: List[Float32]) -> List[Float32]:
         ```
     """
     # Find max absolute value
-    var max_val: Float32 = 0.0
+    var max_val: Float64 = 0.0
     for i in range(len(signal)):
         var abs_val = signal[i]
         if abs_val < 0:
@@ -1095,7 +1103,7 @@ fn normalize_audio(signal: List[Float32]) -> List[Float32]:
         return signal
 
     # Normalize
-    var result = List[Float32]()
+    var result = List[Float64]()
     for i in range(len(signal)):
         result.append(signal[i] / max_val)
 
@@ -1106,7 +1114,7 @@ fn normalize_audio(signal: List[Float32]) -> List[Float32]:
 # Validation Helpers
 # ==============================================================================
 
-fn validate_whisper_audio(audio: List[Float32], duration_seconds: Int) -> Bool:
+fn validate_whisper_audio(audio: List[Float64], duration_seconds: Int) -> Bool:
     """
     Validate audio meets Whisper requirements.
 

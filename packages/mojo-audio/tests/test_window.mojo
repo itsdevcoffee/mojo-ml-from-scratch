@@ -3,7 +3,7 @@
 from audio import hann_window, hamming_window, apply_window
 
 
-fn abs(x: Float64) -> Float64:
+fn abs(x: Float32) -> Float32:
     """Absolute value."""
     if x < 0:
         return -x
@@ -22,11 +22,11 @@ fn test_hann_window_properties() raises:
     # Check symmetry (window[i] should equal window[N-1-i])
     var N = len(window)
     for i in range(N // 2):
-        assert_close(window[i], window[N - 1 - i], 1e-10, "Window should be symmetric")
+        assert_close(window[i], window[N - 1 - i], 1e-5, "Window should be symmetric")
 
-    # Check edges taper to ~0
-    assert_close(window[0], 0.0, 1e-10, "Hann window should start at 0")
-    assert_close(window[N - 1], 0.0, 1e-10, "Hann window should end at 0")
+    # Check edges taper to ~0 (Float32 tolerance)
+    assert_close(window[0], 0.0, 1e-6, "Hann window should start at 0")
+    assert_close(window[N - 1], 0.0, 1e-6, "Hann window should end at 0")
 
     # Check center is maximum (~1.0)
     var center_idx = N // 2
@@ -49,10 +49,10 @@ fn test_hamming_window_properties() raises:
     # Check length
     assert_equal(len(window), 400, "Window should have 400 samples")
 
-    # Check symmetry
+    # Check symmetry (Float32 tolerance)
     var N = len(window)
     for i in range(N // 2):
-        assert_close(window[i], window[N - 1 - i], 1e-10, "Window should be symmetric")
+        assert_close(window[i], window[N - 1 - i], 1e-5, "Window should be symmetric")
 
     # Hamming doesn't taper to 0 (minimum ~0.08)
     assert_true(window[0] > 0.05, "Hamming window should not reach 0")
@@ -92,14 +92,14 @@ fn test_apply_window() raises:
     print("Testing apply_window...")
 
     # Simple test signal
-    var signal: List[Float64] = [1.0, 1.0, 1.0, 1.0]
+    var signal: List[Float32] = [1.0, 1.0, 1.0, 1.0]
     var window = hann_window(4)
 
     var windowed = apply_window(signal, window)
 
-    # Windowed signal should be attenuated at edges
-    assert_close(windowed[0], 0.0, 1e-10, "Edges should be 0 with Hann")
-    assert_close(windowed[3], 0.0, 1e-10, "Edges should be 0 with Hann")
+    # Windowed signal should be attenuated at edges (Float32 tolerance)
+    assert_close(windowed[0], 0.0, 1e-6, "Edges should be 0 with Hann")
+    assert_close(windowed[3], 0.0, 1e-6, "Edges should be 0 with Hann")
 
     # Center should be close to 1.0 (window[center] ≈ 1.0)
     assert_true(windowed[1] > 0.5, "Center values should be less attenuated")
@@ -112,7 +112,7 @@ fn test_apply_window_error_handling() raises:
     """Test error handling for mismatched lengths."""
     print("Testing apply_window error handling...")
 
-    var signal: List[Float64] = [1.0, 2.0, 3.0]
+    var signal: List[Float32] = [1.0, 2.0, 3.0]
     var window = hann_window(5)  # Wrong length!
 
     var raised = False
@@ -135,9 +135,9 @@ fn test_whisper_compatible_window() raises:
 
     assert_equal(len(window), 400, "Window should match Whisper n_fft")
 
-    # Verify it's a valid window
-    assert_close(window[0], 0.0, 1e-10, "Should start at 0")
-    assert_close(window[399], 0.0, 1e-10, "Should end at 0")
+    # Verify it's a valid window (Float32 tolerance)
+    assert_close(window[0], 0.0, 1e-6, "Should start at 0")
+    assert_close(window[399], 0.0, 1e-6, "Should end at 0")
 
     print("  ✓ Whisper-compatible window validated")
 
@@ -152,7 +152,7 @@ fn assert_equal(value: Int, expected: Int, message: String) raises:
         raise Error(message)
 
 
-fn assert_close(value: Float64, expected: Float64, tolerance: Float64, message: String) raises:
+fn assert_close(value: Float32, expected: Float32, tolerance: Float32, message: String) raises:
     """Assert float values are close within tolerance."""
     if abs(value - expected) > tolerance:
         raise Error(message + " (got " + String(value) + ", expected " + String(expected) + ")")

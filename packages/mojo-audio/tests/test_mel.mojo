@@ -7,7 +7,7 @@ from audio import (
 )
 
 
-fn abs(x: Float64) -> Float64:
+fn abs(x: Float32) -> Float32:
     """Absolute value."""
     if x < 0:
         return -x
@@ -19,18 +19,18 @@ fn test_hz_mel_conversion() raises:
     print("Testing Hz/Mel conversions...")
 
     # Test known conversions
-    var mel_1000 = hz_to_mel(1000.0)
+    var mel_1000 = hz_to_mel(Float32(1000.0))
     print("  1000 Hz =", mel_1000, "mels")
 
     # Test round-trip conversion
-    var hz = 1000.0
+    var hz: Float32 = 1000.0
     var mel = hz_to_mel(hz)
     var hz_back = mel_to_hz(mel)
 
     assert_close(hz_back, hz, 0.01, "Round-trip conversion should match")
 
     # Test multiple frequencies
-    var freqs: List[Float64] = [100.0, 500.0, 1000.0, 4000.0, 8000.0]
+    var freqs: List[Float32] = [100.0, 500.0, 1000.0, 4000.0, 8000.0]
     for i in range(len(freqs)):
         var hz_orig = freqs[i]
         var mel_val = hz_to_mel(hz_orig)
@@ -90,7 +90,7 @@ fn test_mel_spectrogram_whisper_shape() raises:
     print("Testing mel spectrogram Whisper compatibility...")
 
     # Create 30s audio @ 16kHz
-    var audio = List[Float64]()
+    var audio = List[Float32]()
     for _ in range(30 * 16000):  # 480,000 samples
         audio.append(0.1)
 
@@ -124,7 +124,7 @@ fn test_mel_spectrogram_basic() raises:
     print("Testing mel spectrogram basic functionality...")
 
     # Short audio for quick test
-    var audio = List[Float64]()
+    var audio = List[Float32]()
     for _ in range(16000):  # 1s
         audio.append(0.5)
 
@@ -150,7 +150,7 @@ fn assert_equal(value: Int, expected: Int, message: String) raises:
         raise Error(message + " (got " + String(value) + ", expected " + String(expected) + ")")
 
 
-fn assert_close(value: Float64, expected: Float64, tolerance: Float64, message: String) raises:
+fn assert_close(value: Float32, expected: Float32, tolerance: Float32, message: String) raises:
     """Assert float values are close."""
     if abs(value - expected) > tolerance:
         raise Error(message)

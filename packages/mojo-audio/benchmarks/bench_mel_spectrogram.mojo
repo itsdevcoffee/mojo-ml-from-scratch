@@ -9,11 +9,11 @@ from time import perf_counter_ns
 
 
 fn benchmark_mel_spec(audio_seconds: Int, iterations: Int) raises:
-    """Benchmark mel spectrogram for given audio length."""
+    """Benchmark mel spectrogram for given audio length (Float32)."""
     print("Benchmarking", audio_seconds, "seconds of audio...")
 
-    # Create test audio
-    var audio = List[Float64]()
+    # Create test audio (Float32 for 2x SIMD!)
+    var audio = List[Float32]()
     for _ in range(audio_seconds * 16000):
         audio.append(0.1)
 

@@ -3,7 +3,7 @@
 from audio import Complex, fft, power_spectrum, stft
 
 
-fn abs(x: Float64) -> Float64:
+fn abs(x: Float32) -> Float32:
     """Absolute value."""
     if x < 0:
         return -x
@@ -47,7 +47,7 @@ fn test_fft_simple() raises:
     print("Testing FFT simple cases...")
 
     # Test 1: DC signal (constant)
-    var dc: List[Float64] = [1.0, 1.0, 1.0, 1.0]
+    var dc: List[Float32] = [1.0, 1.0, 1.0, 1.0]
     var fft_dc = fft(dc)
 
     # DC signal: all energy should be in bin 0
@@ -55,7 +55,7 @@ fn test_fft_simple() raises:
     assert_true(fft_dc[1].power() < 0.1, "Minimal energy in other bins")
 
     # Test 2: Impulse (delta function)
-    var impulse: List[Float64] = [1.0, 0.0, 0.0, 0.0]
+    var impulse: List[Float32] = [1.0, 0.0, 0.0, 0.0]
     var fft_impulse = fft(impulse)
 
     # Impulse: flat spectrum (all bins have equal magnitude)
@@ -71,18 +71,18 @@ fn test_fft_auto_padding() raises:
     print("Testing FFT auto-padding...")
 
     # Power of 2: should work as-is
-    var valid: List[Float64] = [1.0, 2.0, 3.0, 4.0]  # Length 4 = 2²
+    var valid: List[Float32] = [1.0, 2.0, 3.0, 4.0]  # Length 4 = 2²
     var result1 = fft(valid)
     assert_equal(len(result1), 4, "Should keep power-of-2 length")
 
     # Not power of 2: should auto-pad
-    var not_pow2: List[Float64] = [1.0, 2.0, 3.0]  # Length 3
+    var not_pow2: List[Float32] = [1.0, 2.0, 3.0]  # Length 3
     var result2 = fft(not_pow2)
     # Padded to next power of 2 = 4
     assert_equal(len(result2), 4, "Should pad to next power of 2")
 
     # Whisper n_fft=400: should pad to 512
-    var whisper_size = List[Float64]()
+    var whisper_size = List[Float32]()
     for _ in range(400):
         whisper_size.append(0.5)
     var result3 = fft(whisper_size)
@@ -95,7 +95,7 @@ fn test_power_spectrum() raises:
     """Test power spectrum computation."""
     print("Testing power spectrum...")
 
-    var signal: List[Float64] = [1.0, 0.0, 1.0, 0.0]
+    var signal: List[Float32] = [1.0, 0.0, 1.0, 0.0]
     var fft_result = fft(signal)
     var power = power_spectrum(fft_result)
 
@@ -114,10 +114,10 @@ fn test_stft_dimensions() raises:
     print("Testing STFT dimensions...")
 
     # Create 30s of audio at 16kHz
-    var audio_30s = List[Float64]()
+    var audio_30s = List[Float32]()
     var samples_30s = 30 * 16000  # 480,000 samples
 
-    for i in range(samples_30s):
+    for _ in range(samples_30s):
         audio_30s.append(0.1)  # Dummy audio
 
     # Compute STFT with Whisper parameters
@@ -153,8 +153,8 @@ fn test_stft_basic() raises:
     print("Testing STFT basic functionality...")
 
     # Short signal for testing
-    var signal = List[Float64]()
-    for i in range(1024):  # 1024 samples
+    var signal = List[Float32]()
+    for _ in range(1024):  # 1024 samples
         signal.append(0.5)
 
     var spec = stft(signal, n_fft=256, hop_length=128)
@@ -178,7 +178,7 @@ fn assert_equal(value: Int, expected: Int, message: String) raises:
         raise Error(message + " (got " + String(value) + ", expected " + String(expected) + ")")
 
 
-fn assert_close(value: Float64, expected: Float64, tolerance: Float64, message: String) raises:
+fn assert_close(value: Float32, expected: Float32, tolerance: Float32, message: String) raises:
     """Assert float values are close."""
     if abs(value - expected) > tolerance:
         raise Error(message + " (got " + String(value) + ", expected " + String(expected) + ")")
