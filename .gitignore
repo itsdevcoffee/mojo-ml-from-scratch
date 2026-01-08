@@ -5,3 +5,5 @@
 # Mojo compiler traces
 *.trace.json*
 kgen.trace.*
+
+docs/tmp

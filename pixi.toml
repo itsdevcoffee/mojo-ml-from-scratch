@@ -41,6 +41,7 @@ audio-demo = "mojo -I packages/mojo-audio/src packages/mojo-audio/examples/mel_d
 
 # Benchmarks
 audio-bench = "mojo -I packages/mojo-audio/src packages/mojo-audio/benchmarks/bench_mel_spectrogram.mojo"
+audio-bench-optimized = "mojo -O3 -I packages/mojo-audio/src packages/mojo-audio/benchmarks/bench_mel_spectrogram.mojo"
 audio-bench-python = "python packages/mojo-audio/benchmarks/compare_librosa.py"
 
 # =============================================================================
