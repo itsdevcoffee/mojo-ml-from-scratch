@@ -211,6 +211,84 @@ fn precompute_twiddle_factors(N: Int) -> List[Complex]:
     return twiddles^
 
 
+fn fft_radix4(signal: List[Float32], twiddles: List[Complex]) raises -> List[Complex]:
+    """
+    Radix-4 FFT - faster than Radix-2!
+
+    Process 4 points per butterfly (vs 2).
+    Fewer stages: log₄(N) vs log₂(N)
+
+    For N=256: 4 stages (vs 8 for Radix-2)
+
+    Args:
+        signal: Input (length must be power of 4)
+        twiddles: Pre-computed twiddle factors
+
+    Returns:
+        Complex frequency spectrum
+    """
+    var N = len(signal)
+    var log2_n = log2_int(N)
+
+    # Initialize with bit-reversed input
+    var result = List[Complex]()
+    for i in range(N):
+        var reversed_idx = bit_reverse(i, log2_n)
+        result.append(Complex(signal[reversed_idx], 0.0))
+
+    # Radix-4 stages
+    var stride = 1
+    while stride < N:
+        var group_size = 4 * stride
+        var twiddle_stride = N // group_size
+
+        for group_start in range(0, N, group_size):
+            for k in range(stride):
+                # Get 4 butterfly indices
+                var i0 = group_start + k
+                var i1 = i0 + stride
+                var i2 = i1 + stride
+                var i3 = i2 + stride
+
+                # Load inputs
+                var x0 = Complex(result[i0].real, result[i0].imag)
+                var x1 = Complex(result[i1].real, result[i1].imag)
+                var x2 = Complex(result[i2].real, result[i2].imag)
+                var x3 = Complex(result[i3].real, result[i3].imag)
+
+                # Radix-4 butterfly (DIF algorithm)
+                var t0 = x0 + x2
+                var t1 = x0 - x2
+                var t2 = x1 + x3
+                var t3 = Complex(x1.imag - x3.imag, x3.real - x1.real)  # i*(x3-x1)
+
+                var y0 = t0 + t2
+                var y1 = t1 + t3
+                var y2 = t0 - t2
+                var y3 = t1 - t3
+
+                # Apply twiddle factors
+                var tw_idx = k * twiddle_stride
+                if tw_idx > 0 and tw_idx < len(twiddles):
+                    var w1 = Complex(twiddles[tw_idx].real, twiddles[tw_idx].imag)
+                    var w2 = Complex(twiddles[2 * tw_idx].real, twiddles[2 * tw_idx].imag)
+                    var w3 = Complex(twiddles[3 * tw_idx].real, twiddles[3 * tw_idx].imag)
+
+                    y1 = y1 * w1
+                    y2 = y2 * w2
+                    y3 = y3 * w3
+
+                # Store results (explicit copies)
+                result[i0] = Complex(y0.real, y0.imag)
+                result[i1] = Complex(y1.real, y1.imag)
+                result[i2] = Complex(y2.real, y2.imag)
+                result[i3] = Complex(y3.real, y3.imag)
+
+        stride *= 4
+
+    return result^
+
+
 fn fft_iterative_with_twiddles(
     signal: List[Float32],
     twiddles: List[Complex]
@@ -218,6 +296,7 @@ fn fft_iterative_with_twiddles(
     """
     Iterative FFT with pre-provided twiddle factors.
 
+    Automatically chooses Radix-4 (faster!) or Radix-2 based on size.
     For repeated FFTs of same size (like STFT), reuse twiddles!
 
     Args:
@@ -235,40 +314,48 @@ fn fft_iterative_with_twiddles(
     if len(twiddles) < N:
         raise Error("Insufficient twiddle factors")
 
-    # Bit-reversed initialization
-    var result = List[Complex]()
+    # Try Radix-4 for better performance (fewer stages!)
     var log2_n = log2_int(N)
+    var is_power_of_4 = (log2_n % 2 == 0)  # 256, 1024, 4096, etc.
 
-    for i in range(N):
-        var reversed_idx = bit_reverse(i, log2_n)
-        result.append(Complex(signal[reversed_idx], 0.0))
+    if is_power_of_4:
+        # Use Radix-4 FFT (faster!)
+        return fft_radix4(signal, twiddles)
+    else:
+        # Use Radix-2 FFT for other sizes (like 512)
+        # Bit-reversed initialization
+        var result = List[Complex]()
 
-    # Butterfly with cached twiddles
-    var size = 2
-    while size <= N:
-        var half_size = size // 2
-        var stride = N // size
+        for i in range(N):
+            var reversed_idx = bit_reverse(i, log2_n)
+            result.append(Complex(signal[reversed_idx], 0.0))
 
-        for i in range(0, N, size):
-            for k in range(half_size):
-                var twiddle_idx = k * stride
-                var twiddle = Complex(twiddles[twiddle_idx].real, twiddles[twiddle_idx].imag)
+        # Radix-2 butterfly with cached twiddles
+        var size = 2
+        while size <= N:
+            var half_size = size // 2
+            var stride = N // size
 
-                var idx1 = i + k
-                var idx2 = i + k + half_size
+            for i in range(0, N, size):
+                for k in range(half_size):
+                    var twiddle_idx = k * stride
+                    var twiddle = Complex(twiddles[twiddle_idx].real, twiddles[twiddle_idx].imag)
 
-                var t = twiddle * Complex(result[idx2].real, result[idx2].imag)
-                var u = Complex(result[idx1].real, result[idx1].imag)
+                    var idx1 = i + k
+                    var idx2 = i + k + half_size
 
-                var sum_val = u + t
-                var diff_val = u - t
+                    var t = twiddle * Complex(result[idx2].real, result[idx2].imag)
+                    var u = Complex(result[idx1].real, result[idx1].imag)
 
-                result[idx1] = Complex(sum_val.real, sum_val.imag)
-                result[idx2] = Complex(diff_val.real, diff_val.imag)
+                    var sum_val = u + t
+                    var diff_val = u - t
 
-        size *= 2
+                    result[idx1] = Complex(sum_val.real, sum_val.imag)
+                    result[idx2] = Complex(diff_val.real, diff_val.imag)
 
-    return result^
+            size *= 2
+
+        return result^
 
 
 fn fft_iterative(signal: List[Float32]) raises -> List[Complex]:
